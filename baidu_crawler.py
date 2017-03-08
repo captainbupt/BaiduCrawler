@@ -4,6 +4,9 @@ import requests
 from lxml import etree
 import random
 import ip_pool
+import re
+import json
+from optparse import OptionParser
 
 reload(sys)
 sys.setdefaultencoding('utf-8')
@@ -15,12 +18,13 @@ sys.setdefaultencoding('utf-8')
 """
 
 
-def download_html(keywords, proxy):
+def download_html(keywords, proxy=None, page=1):
     """
     download html
 
     Parameters
     ---------
+    page: the page number
     keywords: keywords need to be search.
     proxy: an ip with port.
 
@@ -29,14 +33,35 @@ def download_html(keywords, proxy):
     utf8_content: the web content encode in utf-8.
 
     """
-    key = {'wd': keywords}
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.3; Trident/7.0; rv:11.0) like Gecko'}
+    key = {'wd': keywords, 'pn': (page - 1) * 10}
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_2) AppleWebKit/602.3.12 (KHTML, like Gecko) Version/10.0.2 Safari/602.3.12'}
     web_content = requests.get("http://www.baidu.com/s?", params=key, headers=headers, proxies=proxy, timeout=4)
     content = web_content.text
     return content
 
 
-def html_parser(html):
+def url_parser(url, proxy=None):
+    """
+    transfer baidu's url to real url
+
+    Parameters
+    ---------
+    url: baidu's url(http://www.baidu.com/link?url=***)
+    proxy: an ip with port.
+
+    Returns
+    ------
+    real_url: The real url.
+
+    """
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_2) AppleWebKit/602.3.12 (KHTML, like Gecko) Version/10.0.2 Safari/602.3.12'}
+    web_content = requests.get(url, headers=headers, proxies=proxy, timeout=4)
+    return web_content.url
+
+
+def html_parser(html, proxy=None):
     """
     web parser
 
@@ -50,21 +75,38 @@ def html_parser(html):
     times: the times that key word hits.
 
     """
-    path = "//div[@id='content_left']//div[@class='c-abstract']/text()"  # Xpath of abstract in BaiDu search results
     tree = etree.HTML(html)
-    results = tree.xpath(path)
-    text = [line.strip() for line in results]
-    text_str = ''
-    if len(text) == 0:
-        print "No!"
-    else:
-        for i in text:
-            i = i.strip()
-            text_str += i
-    return text_str
+    items = tree.xpath("//div[@id='content_left']//div[contains(@class,'c-container')]")
+    parse_result_list = []
+    for item in items:
+        content = ''
+        date = ''
+        url = ''
+
+        abstracts = item.xpath(".//div[@class='c-abstract']")
+        for abstract in abstracts:
+            for child in abstract.xpath(".//text()"):
+                pattern = re.compile(r'^([\d]{1,4}年[\d]{1,2}月[\d]{1,2}日).*-.*$')
+                match = pattern.match(str(child))
+                if match:
+                    date = match.group(1)
+                    continue
+                content += child
+
+        hrefs = item.xpath(".//a[@class='c-showurl']")
+        for href in hrefs:
+            url = url_parser(href.get('href'), proxy)
+
+        if len(content) <= 0:
+            continue
+
+        parse_result = {'content': content, 'date': date, 'url': url}
+
+        parse_result_list.append(parse_result)
+    return parse_result_list
 
 
-def extract_all_text(keyword_dict, keyword_text):
+def extract_all_text(keyword, page, result_text):
     """
     ========================================================
     Extract all text of elements in company dict
@@ -76,21 +118,20 @@ def extract_all_text(keyword_dict, keyword_text):
     ========================================================
     Parameters
     ---------
-    keyword_dict: the keyword name dict.
-    keyword_text: file that save all text.
+    keyword: the keyword name dict.
+    page: the max page to search
+    result_text: file that save all text.
 
     Return
     ------
     """
 
-    cn = open(keyword_dict, 'r')
-    print ">>>>>read success<<<"
-    with open(keyword_text, 'w') as ct:
+    with open(result_text, 'w') as rt:
         flag = 0  # Change ip
         switch = 0  # Change the proxies list
         useful_proxies = []
         new_ip = ''
-        for line in cn:
+        for i in range(1, page):
             if switch % 20000 == 0:
                 switch = 1
                 ip_list = ip_pool.get_all_ip(1)
@@ -99,29 +140,26 @@ def extract_all_text(keyword_dict, keyword_text):
             try:
                 if flag % 200 == 0 and len(useful_proxies) != 0:
                     flag = 1
-                    rd = random.randint(0, len(useful_proxies)-1)
+                    rd = random.randint(0, len(useful_proxies) - 1)
                     new_ip = useful_proxies[rd]
-                    print new_ip
+                    print(new_ip)
                 flag += 1
-                proxy = {'http': 'http://'+new_ip}
-                content = download_html(line, proxy)
-                raw_text = html_parser(content)
-                raw_text = raw_text.replace('\n', ' ')
-                print raw_text
-                ct.write(line.strip()+'\t'+raw_text+'\n')
-            except Exception, e:
-                rd = random.randint(0, len(useful_proxies)-1)
+                proxy = {'http': 'http://' + new_ip}
+                content = download_html(keyword, proxy, i)
+                results = html_parser(content, proxy)
+                for result in results:
+                    print json.dumps(result)
+                    rt.write(result['content'] + ',' + result['date'] + ',' + result['url'] + '\n')
+            except Exception as e:
+                rd = random.randint(0, len(useful_proxies) - 1)
                 new_ip = useful_proxies[rd]
                 print 'download error: ', e
-    ct.close()
-    cn.close()
 
 
 def main():
-    keyword_dict = 'data/samples.txt'
-    keyword_text = 'data/results.txt'
-    extract_all_text(keyword_dict, keyword_text)
+    result_text = 'data/results.txt'
+    extract_all_text('e袋洗', 10, result_text)
+
 
 if __name__ == '__main__':
     main()
-
