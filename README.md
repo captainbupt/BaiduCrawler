@@ -1,7 +1,16 @@
 # BaiduCrawler
 A crawler crawling baidu searching results by means of constantly changing proxies.
 
-爬取百度搜索结果中c-abstract里的数据，并使用不断更换代理ip的方式绕过百度反爬虫策略，从而实现对数以10w计的词条的百度搜索结果进行连续爬取。
+Usage: baidu_crawler.py [options]
+
+Options:
+  -h, --help            show this help message and exit
+  -o OUTPUT, --output=OUTPUT
+                        the destination of crawler results
+  -k KEY, --key=KEY     thr keyword to be searched(REQUIRED)
+  -p PAGE, --page=PAGE  the number of page to crawl
+
+爬取百度搜索结果中c-container里的数据，并使用不断更换代理ip的方式绕过百度反爬虫策略，从而实现对数以10w计的词条的百度搜索结果进行连续爬取。
 
 ![](https://github.com/fancoo/BaiduCrawler/blob/master/images/git.png)
 
@@ -19,10 +28,4 @@ A crawler crawling baidu searching results by means of constantly changing proxi
   
 上述参数均可手动调整。
 目前ip池的使用都是一次性的，如果想进一步建设、保存优质ip，可参考我的另一个项目[Proxy](https://github.com/fancoo/Proxy),它是一个代理ip抓取测试评估存储一体化工具，也许可以帮到你。
-
-
-###TODO
-
-* 1. 对因网络原因未爬取的词进行二次爬取，直到达到用户指定的爬取率
-* 2. 对爬取速度快的优质ip增加权重，从而形成一个具有优先级的ip池  
 

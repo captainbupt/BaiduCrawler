@@ -82,6 +82,7 @@ def html_parser(html, proxy=None):
         content = ''
         date = ''
         url = ''
+        title = ''
 
         abstracts = item.xpath(".//div[@class='c-abstract']")
         for abstract in abstracts:
@@ -97,10 +98,16 @@ def html_parser(html, proxy=None):
         for href in hrefs:
             url = url_parser(href.get('href'), proxy)
 
+        title_eles = item.xpath(".//h3[contains(@class,'t')]")
+        for title_ele in title_eles:
+            for child in title_ele.xpath(".//text()"):
+                title += child
+
         if len(content) <= 0:
             continue
 
-        parse_result = {'content': content, 'date': date, 'url': url}
+        print title
+        parse_result = {'content': content, 'date': date, 'url': url, 'title': title}
 
         parse_result_list.append(parse_result)
     return parse_result_list
@@ -131,7 +138,7 @@ def extract_all_text(keyword, page, result_text):
         switch = 0  # Change the proxies list
         useful_proxies = []
         new_ip = ''
-        for i in range(1, page):
+        for i in range(1, page + 1):
             if switch % 20000 == 0:
                 switch = 1
                 ip_list = ip_pool.get_all_ip(1)
@@ -157,8 +164,25 @@ def extract_all_text(keyword, page, result_text):
 
 
 def main():
-    result_text = 'data/results.txt'
-    extract_all_text('e袋洗', 10, result_text)
+    parser = OptionParser()
+    parser.add_option("-o", "--output", action="store",
+                      dest="output",
+                      default="results.csv",
+                      help="the destination of crawler results")
+    parser.add_option("-k", "--key", action="store",
+                      dest="key",
+                      help="thr keyword to be searched")
+    parser.add_option("-p", "--page", action="store",
+                      dest="page",
+                      default=10,
+                      type="int",
+                      help="the number of page to crawl")
+
+    (options, args) = parser.parse_args()
+    if not options.key:
+        parser.error('Keyword not given')
+    result_text = options.output
+    extract_all_text(options.key, options.page, result_text)
 
 
 if __name__ == '__main__':
