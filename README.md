@@ -1,6 +1,7 @@
 # BaiduCrawler
 A crawler crawling baidu searching results by means of constantly changing proxies.
 
+```
 Usage: baidu_crawler.py [options]
 
 Options:
@@ -9,10 +10,12 @@ Options:
                         the destination of crawler results
   -k KEY, --key=KEY     thr keyword to be searched(REQUIRED)
   -p PAGE, --page=PAGE  the number of page to crawl
+```
 
-爬取百度搜索结果中c-container里的数据，并使用不断更换代理ip的方式绕过百度反爬虫策略，从而实现对数以10w计的词条的百度搜索结果进行连续爬取。
+* 爬取百度搜索结果中c-container里的数据。会分别抽取标题、时间、简介和网址，结果按csv格式存储。
+* 使用不断更换代理ip的方式绕过百度反爬虫策略，从而实现对数以10w计的词条的百度搜索结果进行连续爬取。
 
-![](https://github.com/fancoo/BaiduCrawler/blob/master/images/git.png)
+![](https://github.com/captainbupt/BaiduCrawler/blob/master/images/git.png)
 
 ###获取代理ip策略
 

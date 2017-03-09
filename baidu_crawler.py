@@ -171,7 +171,7 @@ def main():
                       help="the destination of crawler results")
     parser.add_option("-k", "--key", action="store",
                       dest="key",
-                      help="thr keyword to be searched")
+                      help="thr keyword to be searched(REQUIRED)")
     parser.add_option("-p", "--page", action="store",
                       dest="page",
                       default=10,
