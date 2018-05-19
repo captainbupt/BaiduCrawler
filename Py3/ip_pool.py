@@ -1,23 +1,23 @@
 # coding:utf-8
-import time
 import config as cfg
+import time
 import requests
 from lxml import etree
 import pymysql as mdb
 import datetime
 
+# For Python 3.6+
 
 class IPFactory:
     """
     代理ip抓取/评估/存储一体化。
     """
-
     def __init__(self):
         self.page_num = cfg.page_num
         self.round = cfg.examine_round
         self.timeout = cfg.timeout
         self.all_ip = set()
-
+        self.delet_timeout = cfg.delet_timeout
         # 创建数据库
         #self.create_db()
 
@@ -57,7 +57,7 @@ class IPFactory:
             cursor.execute(create_table_str)
             conn.commit()
         except OSError:
-            print "无法创建数据库！"
+            print ("无法创建数据库！")
         finally:
             cursor.close()
             conn.close()
@@ -86,7 +86,7 @@ class IPFactory:
             if len(urls) == len(ports):
                 for i in range(len(urls)):
                     # 匹配ip:port对
-                    full_ip = urls[i] + ":" + ports[i]
+                    full_ip = urls[i]+":"+ports[i]
                     # 此处利用all_ip对过往爬取的ip做了记录，下次再爬时如果发现
                     # 已经爬过，就不再加入ip列表。
                     if full_ip in self.all_ip:
@@ -94,7 +94,7 @@ class IPFactory:
                     # 存储
                     ip_list.append(full_ip)
         except Exception as e:
-            print 'get proxies error: ', e
+            print ('get proxies error: ', e)
 
         return ip_list
 
@@ -110,8 +110,8 @@ class IPFactory:
         ###################################
         url_xpath_66 = '/html/body/div[last()]//table//tr[position()>1]/td[1]/text()'
         port_xpath_66 = '/html/body/div[last()]//table//tr[position()>1]/td[2]/text()'
-        for i in xrange(self.page_num):
-            url_66 = 'http://www.66ip.cn/' + str(i + 1) + '.html'
+        for i in range(self.page_num):
+            url_66 = 'http://www.66ip.cn/' + str(i+1) + '.html'
             results = self.get_content(url_66, url_xpath_66, port_xpath_66)
             self.all_ip.update(results)
             current_all_ip.update(results)
@@ -123,8 +123,8 @@ class IPFactory:
         ###################################
         url_xpath_xici = '//table[@id="ip_list"]//tr[position()>1]/td[position()=2]/text()'
         port_xpath_xici = '//table[@id="ip_list"]//tr[position()>1]/td[position()=3]/text()'
-        for i in xrange(self.page_num):
-            url_xici = 'http://www.xicidaili.com/nn/' + str(i + 1)
+        for i in range(self.page_num):
+            url_xici = 'http://www.xicidaili.com/nn/' + str(i+1)
             results = self.get_content(url_xici, url_xpath_xici, port_xpath_xici)
             self.all_ip.update(results)
             current_all_ip.update(results)
@@ -135,8 +135,8 @@ class IPFactory:
         ###################################
         url_xpath_mimi = '//table[@class="list"]//tr[position()>1]/td[1]/text()'
         port_xpath_mimi = '//table[@class="list"]//tr[position()>1]/td[2]/text()'
-        for i in xrange(self.page_num):
-            url_mimi = 'http://www.mimiip.com/gngao/' + str(i + 1)
+        for i in range(self.page_num):
+            url_mimi = 'http://www.mimiip.com/gngao/' + str(i+1)
             results = self.get_content(url_mimi, url_xpath_mimi, port_xpath_mimi)
             self.all_ip.update(results)
             current_all_ip.update(results)
@@ -147,8 +147,8 @@ class IPFactory:
         ###################################
         url_xpath_kuaidaili = '//td[@data-title="IP"]/text()'
         port_xpath_kuaidaili = '//td[@data-title="PORT"]/text()'
-        for i in xrange(self.page_num):
-            url_kuaidaili = 'http://www.kuaidaili.com/free/inha/' + str(i + 1) + '/'
+        for i in range(self.page_num):
+            url_kuaidaili = 'http://www.kuaidaili.com/free/inha/' + str(i+1) + '/'
             results = self.get_content(url_kuaidaili, url_xpath_kuaidaili, port_xpath_kuaidaili)
             self.all_ip.update(results)
             current_all_ip.update(results)
@@ -165,10 +165,11 @@ class IPFactory:
 
         # 可用代理结果
         results = set()
-
+        # 不可用的代理
+        fail_ip = set()
         # 挨个检查代理是否可用
         for p in ip_set:
-            proxy = {'http': 'http://' + p}
+            proxy = {'http': 'http://'+p}
             try:
                 # 请求开始时间
                 start = time.time()
@@ -177,13 +178,15 @@ class IPFactory:
                 end = time.time()
                 # 判断是否可用
                 if r.text is not None:
-                    print 'succeed: ' + p + '\t' + " in " + format(end - start, '0.2f') + 's'
+                    print ('succeed: ' + p + '\t' + " in " + format(end-start, '0.2f') + 's')
                     # 追加代理ip到返回的set中
                     results.add(p)
+                else:
+                    fail_ip.add(p)
             except OSError:
-                print 'timeout:', p
+                print ('timeout:', p)
 
-        return results
+        return results,fail_ip
 
     def get_the_best(self, valid_ip, timeout, round):
         """
@@ -191,11 +194,11 @@ class IPFactory:
         """
         # 循环检查次数
         for i in range(round):
-            print "\n>>>>>>>\tRound\t" + str(i + 1) + "\t<<<<<<<<<<"
+            print ("\n>>>>>>>\tRound\t"+str(i+1)+"\t<<<<<<<<<<")
             # 检查代理是否可用
-            valid_ip = self.get_valid_ip(valid_ip, timeout)
+            valid_ip, _ = self.get_valid_ip(valid_ip, timeout)
             # 停一下
-            if i < round - 1:
+            if i < round-1:
                 time.sleep(30)
 
         # 返回可用数据
@@ -206,76 +209,121 @@ class IPFactory:
         将可用的ip存储进mysql数据库
         """
         if len(valid_ips) == 0:
-            print "本次没有抓到可用ip。"
+            print ("本次没有抓到可用ip。")
             return
         # 连接数据库
-        print "\n>>>>>>>>>>>>>>>>>>>> 代理数据入库处理 Start  <<<<<<<<<<<<<<<<<<<<<<\n"
+        print ("\n>>>>>>>>>>>>>>>>>>>> 代理数据入库处理 Start  <<<<<<<<<<<<<<<<<<<<<<\n")
         conn = mdb.connect(cfg.host, cfg.user, cfg.passwd, cfg.DB_NAME)
         cursor = conn.cursor()
         try:
             for item in valid_ips:
                 # 检查表中是否存在数据
-                item_exist = cursor.execute('SELECT * FROM %s WHERE content="%s"' % (cfg.TABLE_NAME, item))
+                item_exist = cursor.execute('SELECT * FROM %s WHERE content="%s"' %(cfg.TABLE_NAME, item))
 
                 # 新增代理数据入库
                 if item_exist == 0:
                     # 插入数据
-                    n = cursor.execute('INSERT INTO %s VALUES("%s", 1, 0, 0, 1.0, 2.5)' % (cfg.TABLE_NAME, item))
+                    n = cursor.execute('INSERT INTO %s VALUES("%s", 1, 0, 0, 1.0, 2.5)' %(cfg.TABLE_NAME, item))
                     conn.commit()
 
                     # 输出入库状态
                     if n:
-                        print datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S") + " " + item + " 插入成功。\n"
+                        print (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")+" "+item+" 插入成功。\n")
                     else:
-                        print datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S") + " " + item + " 插入失败。\n"
+                        print (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")+" "+item+" 插入失败。\n")
 
                 else:
-                    print datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S") + " " + item + " 已存在。\n"
+                    print (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")+" "+ item +" 已存在。\n")
         except Exception as e:
-            print "入库失败：" + str(e)
+            print ("入库失败：" + str(e))
         finally:
             cursor.close()
             conn.close()
-        print "\n>>>>>>>>>>>>>>>>>>>> 代理数据入库处理 End  <<<<<<<<<<<<<<<<<<<<<<\n"
+        print ("\n>>>>>>>>>>>>>>>>>>>> 代理数据入库处理 End  <<<<<<<<<<<<<<<<<<<<<<\n")
+
+    def delete_from_db(self, delet_ips):
+        """
+        从mysql数据库删除代理
+        """
+        if len(delet_ips) == 0:
+            print ("没有可删除ip。")
+            return
+        # 连接数据库
+        print ("\n>>>>>>>>>>>>>>>>>>>> 代理数据删除处理 Start  <<<<<<<<<<<<<<<<<<<<<<\n")
+        conn = mdb.connect(cfg.host, cfg.user, cfg.passwd, cfg.DB_NAME)
+        cursor = conn.cursor()
+        try:
+            for item in delet_ips:
+                # 检查表中是否存在数据
+                item_exist = cursor.execute('SELECT * FROM %s WHERE content="%s"' %(cfg.TABLE_NAME, item))
+
+                # 删除代理
+                if item_exist == 1:
+                    # 删除数据
+                    n = cursor.execute('DELETE FROM %s WHERE content="%s"' %(cfg.TABLE_NAME, item))
+                    conn.commit()
+
+                    # 输出删除状态
+                    if n:
+                        print (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")+" "+item+" 删除成功。\n")
+                    else:
+                        print (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")+" "+item+" 删除失败。\n")
+
+                else:
+                    print (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")+" "+ item +" 不存在。\n")
+        except Exception as e:
+            print ("删除失败：" + str(e))
+        finally:
+            cursor.close()
+            conn.close()
+        print ("\n>>>>>>>>>>>>>>>>>>>> 代理数据删除 End  <<<<<<<<<<<<<<<<<<<<<<\n")
 
     def get_proxies(self):
-        """
-                # 连接数据库
-                conn = mdb.connect(cfg.host, cfg.user, cfg.passwd, cfg.DB_NAME)
-                cursor = conn.cursor()
-
-                # 检查数据表中是否有数据
-                try:
-                    ip_exist = cursor.execute('SELECT * FROM %s ' % cfg.TABLE_NAME)
-
-                    # 提取数据
-                    result = cursor.fetchall()
-
-                    # 若表里有数据　直接返回，没有则抓取再返回
-                    if len(result):
-                        for item in result:
-                            ip_list.append(item[0])
-                    else:
-                        # 获取代理数据
-                        current_ips = self.get_all_ip()
-                        valid_ips = self.get_the_best(current_ips, self.timeout, self.round)
-                        self.save_to_db(valid_ips)
-                        ip_list.extend(valid_ips)
-                except Exception as e:
-                    print "从数据库获取ip失败！"
-                finally:
-                    cursor.close()
-                    conn.close()
-
-                return ip_list
-                """
         ip_list = []
 
-        # 获取代理数据
-        current_ips = self.get_all_ip()
-        valid_ips = self.get_the_best(current_ips, self.timeout, self.round)
-        ip_list.extend(valid_ips)
+        # 连接数据库
+        conn = mdb.connect(cfg.host, cfg.user, cfg.passwd, cfg.DB_NAME)
+        cursor = conn.cursor()
+
+        # 检查数据表中是否有数据
+        try:
+            ip_exist = cursor.execute('SELECT * FROM %s ' % cfg.TABLE_NAME)
+
+            # 提取数据
+            result = cursor.fetchall()
+
+            # 若表里有数据　直接返回，没有则抓取再返回
+            if len(result):
+                for item in result:
+                    ip_list.append(item[0])
+            else:
+                # 获取代理数据
+                current_ips = self.get_all_ip()
+                valid_ips,_ = self.get_the_best(current_ips, self.timeout, self.round)
+                self.save_to_db(valid_ips)
+                ip_list.extend(valid_ips)
+        except Exception as e:
+            print ("从数据库获取ip失败！")
+        finally:
+            cursor.close()
+            conn.close()
+
         return ip_list
-
-
 ip_factory = IPFactory()
+
+def ip_get_test_save(timeout,round):
+
+    ip_factory = IPFactory()
+    ips = ip_factory.get_all_ip()
+    bestIp = ip_factory.get_the_best(ips,timeout,round)
+    ip_factory.save_to_db(bestIp)
+
+def test_ip_and_delete ():
+
+    ips = ip_factory.get_proxies()
+    _,about_to_deletes = ip_factory.get_valid_ip(ips,timeout=ip_factory.timeout)
+    ip_factory.delete_from_db(about_to_deletes)
+
+if __name__ == '__main__':
+    ip_get_test_save(1.5,1)
+    #test_ip_and_delete()

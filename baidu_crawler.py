@@ -7,6 +7,7 @@ import ip_pool
 import re
 import json
 from optparse import OptionParser
+import traceback
 
 reload(sys)
 sys.setdefaultencoding('utf-8')
@@ -16,6 +17,14 @@ sys.setdefaultencoding('utf-8')
  Extract text from the result of BaiDu search
 ================================================
 """
+
+user_agent_pool = [
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_3) AppleWebKit/604.5.6 (KHTML, like Gecko) Version/11.0.3 Safari/604.5.6',
+    'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.181 Mobile Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.13; rv:59.0) Gecko/20100101 Firefox/59.0'
+    'Mozilla/5.0 (Macintosh;U;IntelMacOSX10_6_8;en-us) AppleWebKit/534.50 (KHTML,likeGecko) Version/5.1 Safari/534.50'
+    'Mozilla/5.0 (Macintosh;IntelMacOSX10.6;rv:2.0.1) Gecko/20100101 Firefox/4.0.1'
+]
 
 
 def download_html(keywords, proxy=None, page=1):
@@ -31,50 +40,40 @@ def download_html(keywords, proxy=None, page=1):
     Returns
     ------
     utf8_content: the web content encode in utf-8.
-
     """
+    # 抓取参数 https://www.baidu.com/s?wd=testRequest
     key = {'wd': keywords, 'pn': (page - 1) * 10}
+
+    # 请求Header
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_2) AppleWebKit/602.3.12 (KHTML, like Gecko) Version/10.0.2 Safari/602.3.12'}
-    web_content = requests.get("http://www.baidu.com/s?", params=key, headers=headers, proxies=proxy, timeout=4)
-    content = web_content.text
-    return content
+        'User-Agent': random.choice(user_agent_pool)}
+
+    proxies = {'http': 'http://' + proxy}
+    # 抓取数据内容
+    web_content = requests.get("https://www.baidu.com/s?", params=key, headers=headers, proxies=proxies, timeout=4)
+
+    return web_content.text
 
 
 def url_parser(url, proxy=None):
     """
     transfer baidu's url to real url
-
     Parameters
     ---------
     url: baidu's url(http://www.baidu.com/link?url=***)
     proxy: an ip with port.
-
     Returns
     ------
     real_url: The real url.
-
     """
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_2) AppleWebKit/602.3.12 (KHTML, like Gecko) Version/10.0.2 Safari/602.3.12'}
-    web_content = requests.get(url, headers=headers, proxies=proxy, timeout=4)
-    return web_content.url
+        'User-Agent': random.choice(user_agent_pool)}
+
+    web_content = requests.get(url, headers=headers, timeout=4, allow_redirects=False)
+    return web_content.headers['Location']
 
 
-def html_parser(html, proxy=None):
-    """
-    web parser
-
-    Parameters
-    ----------
-    html: the web html.
-
-    Returns
-    -------
-    text: the whole text of the search results.
-    times: the times that key word hits.
-
-    """
+def html_parser(html):
     tree = etree.HTML(html)
     items = tree.xpath("//div[@id='content_left']//div[contains(@class,'c-container')]")
     parse_result_list = []
@@ -96,7 +95,10 @@ def html_parser(html, proxy=None):
 
         hrefs = item.xpath(".//a[@class='c-showurl']")
         for href in hrefs:
-            url = url_parser(href.get('href'), proxy)
+            try:
+                url = url_parser(href.get('href'), proxy)
+            except:
+                url = href.get('href')
 
         title_eles = item.xpath(".//h3[contains(@class,'t')]")
         for title_ele in title_eles:
@@ -106,61 +108,51 @@ def html_parser(html, proxy=None):
         if len(content) <= 0:
             continue
 
-        print title
         parse_result = {'content': content, 'date': date, 'url': url, 'title': title}
 
         parse_result_list.append(parse_result)
     return parse_result_list
 
 
-def extract_all_text(keyword, page, result_text):
-    """
-    ========================================================
-    Extract all text of elements in company dict
-    There are 3 strategies:
-        1. Every time appears "download timeout", I will choose another proxy.
-        2. Every 200 times after I crawl, change a proxy.
-        3. Every 2000,0 times after I crawl, Re-construct an ip_pool.
-
-    ========================================================
-    Parameters
-    ---------
-    keyword: the keyword name dict.
-    page: the max page to search
-    result_text: file that save all text.
-
-    Return
-    ------
-    """
+def extract_all_text(keyword, page, result_text, ip_factory):
+    useful_proxies = {}
+    max_failure_times = 3
+    try:
+        # 获取代理IP数据
+        for ip in ip_factory.get_proxies():
+            useful_proxies[ip] = 0
+        print "总共：" + str(len(useful_proxies)) + 'IP可用'
+    except OSError:
+        print "获取代理ip时出错！"
 
     with open(result_text, 'w') as rt:
-        flag = 0  # Change ip
-        switch = 0  # Change the proxies list
-        useful_proxies = []
-        new_ip = ''
-        for i in range(1, page + 1):
-            if switch % 20000 == 0:
-                switch = 1
-                ip_list = ip_pool.get_all_ip(1)
-                useful_proxies = ip_pool.get_the_best(1, ip_list, 1.5, 20)
-            switch += 1
+
+        current_page = 1
+        while current_page < page:
+
+            # 设置随机代理
+            proxy = random.choice(useful_proxies.keys())
+            print "change proxies: " + proxy
             try:
-                if flag % 200 == 0 and len(useful_proxies) != 0:
-                    flag = 1
-                    rd = random.randint(0, len(useful_proxies) - 1)
-                    new_ip = useful_proxies[rd]
-                    print(new_ip)
-                flag += 1
-                proxy = {'http': 'http://' + new_ip}
-                content = download_html(keyword, proxy, i)
-                results = html_parser(content, proxy)
-                for result in results:
-                    print json.dumps(result)
-                    rt.write(result['content'] + ',' + result['date'] + ',' + result['url'] + '\n')
-            except Exception as e:
-                rd = random.randint(0, len(useful_proxies) - 1)
-                new_ip = useful_proxies[rd]
-                print 'download error: ', e
+                content = download_html(keyword, proxy, current_page)
+            except:
+                # 超过3次则删除此proxy
+                useful_proxies[proxy] += 1
+                if useful_proxies[proxy] > max_failure_times:
+                    useful_proxies.remove(proxy)
+                continue
+
+            if content is None:
+                continue
+
+            results = html_parser(content)
+
+            current_page += 1
+
+            for result in results:
+                print json.dumps(result)
+                rt.write(
+                    result['title'] + '\t' + result['content'] + '\t' + result['date'] + '\t' + result['url'] + '\n')
 
 
 def main():
@@ -182,7 +174,7 @@ def main():
     if not options.key:
         parser.error('Keyword not given')
     result_text = options.output
-    extract_all_text(options.key, options.page, result_text)
+    extract_all_text(options.key, options.page, result_text, ip_pool.ip_factory)
 
 
 if __name__ == '__main__':
